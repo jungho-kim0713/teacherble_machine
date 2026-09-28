@@ -1,0 +1,457 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>두더지 잡기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Gothic+A1:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --night:#171017;
+    --soil:#3a2519;
+    --soil-dark:#231409;
+    --pit:#120803;
+    --grass:#7ca23c;
+    --grass-dim:#4e6a26;
+    --cream:#f6efe2;
+    --gold:#f0b429;
+    --gold-dim:#8a6210;
+    --rose:#e4614f;
+    --line:rgba(246,239,226,.16);
+    --r:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    min-height:100vh;
+    background:radial-gradient(120% 80% at 50% 0%, #2b1c28 0%, var(--night) 62%);
+    color:var(--cream);
+    font-family:'Gothic A1',system-ui,sans-serif;
+    display:flex;justify-content:center;
+    padding:24px 16px 40px;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .app{width:100%;max-width:660px}
+
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px}
+  h1{font-family:'Jua',sans-serif;font-size:30px;letter-spacing:.02em;line-height:1}
+  h1 em{font-style:normal;color:var(--gold)}
+  .rule{font-size:12.5px;color:rgba(246,239,226,.55);line-height:1.6;text-align:right}
+  .rule b{color:var(--cream);font-weight:500}
+  .rule b.pen{color:var(--rose)}
+
+  .hud{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+       background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  .cell{background:rgba(255,255,255,.03);padding:10px 12px}
+  .cell span{display:block;font-size:11px;letter-spacing:.08em;color:rgba(246,239,226,.5)}
+  .cell strong{font-family:'Jua',sans-serif;font-size:22px;font-weight:400;line-height:1.3}
+  .cell strong.sm{font-size:16px}
+  .cell.warn strong{color:var(--rose)}
+
+  .bar{position:relative;height:9px;border-radius:99px;background:rgba(255,255,255,.07);margin:14px 0 6px}
+  .bar i{position:absolute;inset:0 auto 0 0;width:0;border-radius:99px;background:var(--grass);transition:width .25s ease}
+  .bar i.done{background:var(--gold)}
+  .bar .goal{position:absolute;top:-5px;bottom:-5px;right:-1px;width:2px;background:var(--cream);opacity:.75}
+  .bar .goal::after{content:attr(data-n);position:absolute;top:-17px;left:50%;transform:translateX(-50%);
+                    font-size:10px;color:rgba(246,239,226,.6)}
+  .bar .goal[hidden]{display:none}
+  .barnote{font-size:12px;color:rgba(246,239,226,.5);margin-bottom:16px;min-height:18px}
+
+  .field{position:relative;background:linear-gradient(180deg,var(--soil) 0%, var(--soil-dark) 100%);
+         border:1px solid rgba(0,0,0,.4);border-radius:20px;padding:22px 18px}
+  .field::before{content:'';position:absolute;left:0;right:0;top:0;height:10px;
+    background:repeating-linear-gradient(90deg,var(--grass) 0 7px,var(--grass-dim) 7px 13px);
+    border-radius:20px 20px 0 0;opacity:.85}
+  .board{display:grid;grid-template-columns:repeat(5,1fr);gap:12px 10px;margin-top:8px}
+
+  .hole{position:relative;aspect-ratio:1/1;border:0;background:none;padding:0;cursor:pointer;touch-action:manipulation}
+  .pit{position:absolute;left:4%;right:4%;bottom:0;height:44%;border-radius:50%;
+       background:radial-gradient(ellipse at 50% 30%, var(--pit) 55%, #050201 100%);
+       box-shadow:inset 0 5px 7px rgba(0,0,0,.8)}
+  .rim{position:absolute;left:0;right:0;bottom:-3px;height:48%;border-radius:50%;
+       border-top:3px solid rgba(255,255,255,.07);pointer-events:none;z-index:3}
+  .window{position:absolute;left:14%;right:14%;bottom:9%;height:80%;overflow:hidden;display:flex;align-items:flex-end;z-index:2}
+  .mole{width:100%;transform:translateY(106%);transition:transform .13s cubic-bezier(.3,1.5,.6,1)}
+  .hole.up .mole{transform:translateY(6%)}
+  .hole.hit .mole{transform:translateY(60%) scale(.9);transition-duration:.09s}
+  .hole:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:12px}
+
+  .pop{position:absolute;left:50%;top:6%;transform:translateX(-50%);z-index:5;pointer-events:none;
+       font-family:'Jua',sans-serif;font-size:20px;color:var(--grass);opacity:0}
+  .pop.gold{color:var(--gold)}
+  .pop.miss{color:var(--rose)}
+  @keyframes fly{0%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-38px)}}
+  @keyframes sink{0%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,26px)}}
+  .pop.show{animation:fly .6s ease-out forwards}
+  .pop.miss.show{animation:sink .6s ease-out forwards}
+  .field.hurt{animation:shake .18s}
+  @keyframes shake{0%,100%{transform:translateX(0)}30%{transform:translateX(-4px)}70%{transform:translateX(4px)}}
+
+  .veil{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:12px;background:rgba(15,8,3,.92);border-radius:20px;z-index:9;text-align:center;padding:22px}
+  .veil[hidden],[hidden]{display:none}
+  .veil h2{font-family:'Jua',sans-serif;font-size:25px;font-weight:400}
+  .veil p{font-size:13.5px;color:rgba(246,239,226,.65);line-height:1.8;max-width:36ch}
+  .veil p b{color:var(--gold);font-weight:500}
+  .veil p b.pen{color:var(--rose)}
+
+  .modes{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:430px;margin-top:4px}
+  .mode{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:var(--r);
+        padding:16px 14px;text-align:left;color:var(--cream);cursor:pointer;font-family:inherit;
+        transition:border-color .12s,background .12s}
+  .mode:hover{background:rgba(255,255,255,.09);border-color:var(--gold)}
+  .mode:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  .mode b{display:block;font-family:'Jua',sans-serif;font-size:17px;font-weight:400;margin-bottom:6px}
+  .mode.sprint b{color:var(--gold)}
+  .mode span{display:block;font-size:12px;line-height:1.65;color:rgba(246,239,226,.6)}
+  .mode em{display:block;font-style:normal;font-size:11px;letter-spacing:.05em;margin-top:8px;color:rgba(246,239,226,.4)}
+
+  button.go{font-family:'Jua',sans-serif;font-size:17px;color:var(--soil-dark);background:var(--gold);
+    border:0;border-radius:99px;padding:11px 30px;cursor:pointer;margin-top:4px;
+    box-shadow:0 4px 0 var(--gold-dim);transition:transform .1s,box-shadow .1s}
+  button.go:hover{transform:translateY(1px);box-shadow:0 3px 0 var(--gold-dim)}
+  button.go:active{transform:translateY(4px);box-shadow:0 0 0 var(--gold-dim)}
+  button.go:focus-visible{outline:2px solid var(--cream);outline-offset:3px}
+  button.ghost{background:none;border:0;color:rgba(246,239,226,.55);font-family:inherit;font-size:12.5px;
+    text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:4px}
+  button.ghost:hover{color:var(--cream)}
+
+  .dots{display:flex;gap:7px}
+  .dots i{width:9px;height:9px;border-radius:50%;background:rgba(246,239,226,.2)}
+  .dots i.on{background:var(--gold)}
+
+  .legend{display:flex;gap:18px;justify-content:center;margin-top:16px;font-size:12.5px;color:rgba(246,239,226,.6)}
+  .legend div{display:flex;align-items:center;gap:7px}
+  .legend svg{width:22px}
+
+  @media (max-width:520px){
+    h1{font-size:24px} .rule{font-size:11px}
+    .board{grid-template-columns:repeat(4,1fr)}
+    .cell strong{font-size:19px} .cell strong.sm{font-size:14px}
+    .modes{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .mole{transition-duration:.01ms} .pop.show{animation-duration:.01ms} .field.hurt{animation:none}
+  }
+</style>
+
+<div class="app">
+  <header>
+    <h1>두더지 <em>잡기</em></h1>
+    <p class="rule" id="rule">보통 <b>3점</b> · 황금 <b>5점</b> · 놓치면 <b class="pen">-3점</b></p>
+  </header>
+
+  <div class="hud">
+    <div class="cell"><span id="lblA">모드</span><strong id="hA" class="sm">선택 대기</strong></div>
+    <div class="cell"><span>점수</span><strong id="hScore">0</strong></div>
+    <div class="cell" id="timeCell"><span>남은 시간</span><strong id="hTime">-</strong></div>
+    <div class="cell"><span id="lblD">기록</span><strong id="hD">0</strong></div>
+  </div>
+
+  <div class="bar"><i id="bar"></i><div class="goal" id="goal" data-n="41"></div></div>
+  <p class="barnote" id="note">모드를 고르면 시작합니다.</p>
+
+  <div class="field">
+    <div class="board" id="board"></div>
+
+    <div class="veil" id="veil">
+      <div id="pickPanel">
+        <h2>모드를 고르세요</h2>
+        <div class="modes">
+          <button class="mode" id="mRounds">
+            <b>5라운드 도전</b>
+            <span>라운드마다 41점을 채우면 즉시 통과. 올라갈수록 시간은 줄고 두더지는 빨라집니다.</span>
+            <em>라운드당 13–15초</em>
+          </button>
+          <button class="mode sprint" id="mSprint">
+            <b>10초 스코어 어택</b>
+            <span>목표 점수 없이 10초 동안 최고 점수만 노립니다. 두더지가 쉬지 않고 올라옵니다.</span>
+            <em>한 판 10초</em>
+          </button>
+        </div>
+      </div>
+
+      <div id="resultPanel" hidden>
+        <div class="dots" id="dots" style="justify-content:center;margin-bottom:12px"></div>
+        <h2 id="vTitle">준비</h2>
+        <p id="vText" style="margin:8px auto 0">준비</p>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:14px">
+          <button class="go" id="vBtn">시작</button>
+          <button class="ghost" id="vAlt">모드 선택으로</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div><svg viewBox="0 0 60 54"><ellipse cx="30" cy="30" rx="22" ry="21" fill="#6b4a32"/><ellipse cx="30" cy="36" rx="12" ry="10" fill="#c99b78"/><circle cx="22" cy="26" r="3" fill="#1b1008"/><circle cx="38" cy="26" r="3" fill="#1b1008"/><ellipse cx="30" cy="33" rx="4" ry="3" fill="#8a5a48"/></svg>보통 +3</div>
+    <div><svg viewBox="0 0 60 54"><ellipse cx="30" cy="30" rx="22" ry="21" fill="#d99b16"/><ellipse cx="30" cy="36" rx="12" ry="10" fill="#f7de9a"/><circle cx="22" cy="26" r="3" fill="#40290a"/><circle cx="38" cy="26" r="3" fill="#40290a"/><ellipse cx="30" cy="33" rx="4" ry="3" fill="#a8720f"/></svg>황금 +5</div>
+    <div style="color:var(--rose)">놓치면 -3</div>
+  </div>
+</div>
+
+<script>
+const HOLES = 10, GOAL = 41, PENALTY = 3, TOTAL_ROUNDS = 5;
+
+const ROUNDS = [
+  { up:1400, gap:230, time:15, gold:0.30 },
+  { up:1220, gap:210, time:15, gold:0.26 },
+  { up:1050, gap:190, time:14, gold:0.22 },
+  { up: 910, gap:170, time:14, gold:0.18 },
+  { up: 790, gap:150, time:13, gold:0.15 }
+];
+const SPRINT = { up:780, gap:140, time:10, gold:0.20 };
+
+const $ = id => document.getElementById(id);
+const board = $('board'), veil = $('veil'), pickPanel = $('pickPanel'), resultPanel = $('resultPanel');
+const vTitle = $('vTitle'), vText = $('vText'), vBtn = $('vBtn'), vAlt = $('vAlt');
+const dots = $('dots'), bar = $('bar'), goal = $('goal'), note = $('note'), timeCell = $('timeCell');
+
+let mode = null, round = 1, score = 0, total = 0;
+let hits = 0, swings = 0, escapes = 0, best = 0, plays = 0;
+let live = false, activeIdx = -1, activeType = null, lastIdx = -1;
+let tCycle = null, tHide = null, tTick = null, endsAt = 0;
+
+function cfg(){ return mode === 'sprint' ? SPRINT : ROUNDS[round-1]; }
+
+function moleSVG(gold){
+  const body = gold ? '#d99b16' : '#6b4a32';
+  const belly = gold ? '#f7de9a' : '#c99b78';
+  const nose = gold ? '#a8720f' : '#8a5a48';
+  const eye = gold ? '#40290a' : '#1b1008';
+  const shine = gold ? '<ellipse cx="30" cy="14" rx="9" ry="4" fill="#fff" opacity=".35"/>' : '';
+  return `<svg class="mole" viewBox="0 0 60 54" aria-hidden="true">
+    <ellipse cx="11" cy="24" rx="6" ry="8" fill="${body}"/><ellipse cx="49" cy="24" rx="6" ry="8" fill="${body}"/>
+    <ellipse cx="30" cy="30" rx="22" ry="21" fill="${body}"/>${shine}
+    <ellipse cx="30" cy="37" rx="13" ry="11" fill="${belly}"/>
+    <circle cx="22" cy="26" r="3.4" fill="${eye}"/><circle cx="38" cy="26" r="3.4" fill="${eye}"/>
+    <circle cx="23.2" cy="24.8" r="1.1" fill="#fff"/><circle cx="39.2" cy="24.8" r="1.1" fill="#fff"/>
+    <ellipse cx="30" cy="33" rx="4.4" ry="3.2" fill="${nose}"/>
+    <path d="M18 36 H8 M18 39 H9" stroke="${nose}" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M42 36 H52 M42 39 H51" stroke="${nose}" stroke-width="1.4" stroke-linecap="round"/>
+  </svg>`;
+}
+
+for(let i=0;i<HOLES;i++){
+  const b = document.createElement('button');
+  b.className = 'hole';
+  b.setAttribute('aria-label', `${i+1}번 구멍`);
+  b.innerHTML = `<div class="pit"></div><div class="window">${moleSVG(false)}</div><div class="rim"></div><div class="pop"></div>`;
+  b.addEventListener('click', () => whack(i));
+  board.appendChild(b);
+}
+const holes = [...document.querySelectorAll('.hole')];
+for(let i=0;i<TOTAL_ROUNDS;i++) dots.appendChild(document.createElement('i'));
+
+let audio = null;
+function tone(type, f0, f1, vol, dur){
+  try{
+    audio = audio || new (window.AudioContext||window.webkitAudioContext)();
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, audio.currentTime);
+    o.frequency.exponentialRampToValueAtTime(f1, audio.currentTime+dur*.75);
+    g.gain.setValueAtTime(vol, audio.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, audio.currentTime+dur);
+    o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime+dur+.01);
+  }catch(e){}
+}
+const beep = gold => tone('triangle', gold?880:520, gold?1320:260, .16, .16);
+const thud = () => tone('sine', 200, 70, .12, .22);
+
+function paint(){
+  $('hScore').textContent = score;
+  if(mode === 'sprint'){
+    $('lblA').textContent = '모드';
+    $('hA').textContent = '스코어 어택';
+    $('hA').classList.add('sm');
+    $('lblD').textContent = '최고 기록';
+    $('hD').textContent = best;
+    goal.hidden = true;
+    const ref = Math.max(best, 45);
+    bar.style.width = Math.max(0, Math.min(100, score/ref*100)) + '%';
+    bar.classList.toggle('done', best > 0 && score > best);
+  } else if(mode === 'rounds'){
+    $('lblA').textContent = '라운드';
+    $('hA').textContent = `${round} / ${TOTAL_ROUNDS}`;
+    $('hA').classList.remove('sm');
+    $('lblD').textContent = '총점';
+    $('hD').textContent = total + Math.max(0, score);
+    goal.hidden = false;
+    bar.style.width = Math.max(0, Math.min(100, score/GOAL*100)) + '%';
+    bar.classList.toggle('done', score > 40);
+  }
+  [...dots.children].forEach((d,i)=> d.classList.toggle('on', mode==='rounds' && i < round-1));
+  const acc = swings ? Math.round(hits/swings*100) : 0;
+  if(live){
+    note.textContent = mode === 'sprint'
+      ? `잡은 두더지 ${hits}마리 · 놓친 두더지 ${escapes}마리 · 명중률 ${acc}%`
+      : `목표까지 ${Math.max(0, GOAL-score)}점 · 놓친 두더지 ${escapes}마리 · 명중률 ${acc}%`;
+  }
+}
+
+function clearTimers(){ clearTimeout(tCycle); clearTimeout(tHide); clearInterval(tTick); }
+function hideMole(){ if(activeIdx >= 0) holes[activeIdx].classList.remove('up'); activeIdx = -1; activeType = null; }
+
+function spawn(){
+  if(!live) return;
+  const c = cfg();
+  let i; do { i = Math.floor(Math.random()*HOLES); } while(i === lastIdx);
+  lastIdx = i;
+  const gold = Math.random() < c.gold;
+  activeIdx = i; activeType = gold ? 'gold' : 'normal';
+  holes[i].querySelector('.window').innerHTML = moleSVG(gold);
+  requestAnimationFrame(()=> holes[i].classList.add('up'));
+  tHide = setTimeout(()=>{ escape(i); tCycle = setTimeout(spawn, c.gap); }, c.up);
+}
+
+function flash(i, text, cls){
+  const pop = holes[i].querySelector('.pop');
+  pop.textContent = text;
+  pop.className = 'pop show' + cls;
+  setTimeout(()=> pop.className = 'pop', 600);
+}
+
+function escape(i){
+  hideMole();
+  escapes++;
+  score -= PENALTY;
+  thud();
+  flash(i, '-' + PENALTY, ' miss');
+  const field = document.querySelector('.field');
+  field.classList.add('hurt');
+  setTimeout(()=> field.classList.remove('hurt'), 180);
+  paint();
+}
+
+function whack(i){
+  if(!live) return;
+  swings++;
+  if(i !== activeIdx){ paint(); return; }
+  const gold = activeType === 'gold';
+  hits++; score += gold ? 5 : 3;
+  beep(gold);
+  flash(i, gold ? '+5' : '+3', gold ? ' gold' : '');
+  holes[i].classList.add('hit');
+  setTimeout(()=> holes[i].classList.remove('hit','up'), 90);
+  clearTimeout(tHide);
+  activeIdx = -1; activeType = null;
+  paint();
+  if(mode === 'rounds' && score > 40){ endGame(); return; }
+  tCycle = setTimeout(spawn, cfg().gap);
+}
+
+function startGame(){
+  clearTimers(); hideMole();
+  score = 0; hits = 0; swings = 0; escapes = 0; live = true;
+  veil.hidden = true;
+  timeCell.classList.remove('warn');
+  endsAt = Date.now() + cfg().time*1000;
+  tTick = setInterval(tick, 100);
+  tick(); paint();
+  tCycle = setTimeout(spawn, 350);
+}
+
+function tick(){
+  const left = Math.max(0, (endsAt - Date.now())/1000);
+  $('hTime').textContent = left.toFixed(1) + '초';
+  timeCell.classList.toggle('warn', left <= 3);
+  if(left <= 0) endGame();
+}
+
+function showPicker(){
+  clearTimers(); hideMole(); live = false;
+  mode = null; round = 1; total = 0; score = 0; hits = 0; swings = 0; escapes = 0;
+  veil.hidden = false; pickPanel.hidden = false; resultPanel.hidden = true;
+  $('hTime').textContent = '-';
+  $('hScore').textContent = '0';
+  $('lblA').textContent = '모드'; $('hA').textContent = '선택 대기'; $('hA').classList.add('sm');
+  $('lblD').textContent = '기록'; $('hD').textContent = plays ? best : '0';
+  bar.style.width = '0'; bar.classList.remove('done'); goal.hidden = true;
+  note.textContent = '모드를 고르면 시작합니다.';
+  $('rule').innerHTML = '보통 <b>3점</b> · 황금 <b>5점</b> · 놓치면 <b class="pen">-3점</b>';
+}
+
+function result({title, text, btn, onBtn}){
+  veil.hidden = false; pickPanel.hidden = true; resultPanel.hidden = false;
+  vTitle.textContent = title;
+  vText.innerHTML = text;
+  vBtn.textContent = btn;
+  vBtn.onclick = onBtn;
+  vBtn.focus();
+}
+
+function endGame(){
+  const spare = Math.max(0, (endsAt - Date.now())/1000);
+  const cleared = round;
+  live = false; clearTimers(); hideMole();
+  $('hTime').textContent = spare.toFixed(1) + '초';
+  const acc = swings ? Math.round(hits/swings*100) : 0;
+
+  if(mode === 'sprint'){
+    plays++;
+    const record = score > best;
+    if(record) best = score;
+    result({
+      title: record && plays > 1 ? '신기록!' : '10초 종료',
+      text: `<b>${score}점</b> · 잡은 두더지 ${hits}마리 · 놓친 두더지 ${escapes}마리 · 명중률 ${acc}%<br>${
+        plays > 1 ? `최고 기록 <b>${best}점</b>` : '기록이 남았습니다. 한 번 더 깨보세요.'}`,
+      btn: '다시 10초',
+      onBtn: startGame
+    });
+    note.textContent = `10초 스코어 어택 ${score}점 · 최고 ${best}점 · 명중률 ${acc}%`;
+    paint();
+    return;
+  }
+
+  const passed = score > 40;
+  if(passed){
+    total += score;
+    if(round === TOTAL_ROUNDS){
+      result({
+        title: '5라운드 전부 통과!',
+        text: `최종 총점 <b>${total}점</b> · 남긴 시간 ${spare.toFixed(1)}초 · 명중률 ${acc}%<br>밭을 완전히 지켜냈습니다.`,
+        btn: '처음부터 다시',
+        onBtn: () => { round = 1; total = 0; startGame(); }
+      });
+    } else {
+      const next = ROUNDS[round];
+      round++;
+      result({
+        title: `라운드 ${cleared} 통과`,
+        text: `${spare.toFixed(1)}초 남기고 ${score}점 · 놓친 두더지 ${escapes}마리 · 명중률 ${acc}%<br>다음은 <b>${next.time}초</b> 안에, 두더지는 <b>${(next.up/1000).toFixed(2)}초</b>만 얼굴을 내밉니다.`,
+        btn: `라운드 ${round} 시작`,
+        onBtn: startGame
+      });
+    }
+  } else {
+    result({
+      title: '41점에 못 미쳤어요',
+      text: `${score}점 · 놓친 두더지 ${escapes}마리(<b class="pen">-${escapes*PENALTY}점</b>) · 명중률 ${acc}%<br>한 마리를 놓치면 한 마리를 더 잡아야 본전입니다.`,
+      btn: `라운드 ${round} 다시 도전`,
+      onBtn: startGame
+    });
+  }
+  note.textContent = passed
+    ? `라운드 ${cleared} 통과 · ${score}점 · ${spare.toFixed(1)}초 남김 · 명중률 ${acc}%`
+    : `이번 라운드 ${score}점 · 놓친 두더지 ${escapes}마리 · 명중률 ${acc}%`;
+  paint();
+}
+
+$('mRounds').onclick = () => {
+  mode = 'rounds'; round = 1; total = 0;
+  goal.dataset.n = '41';
+  $('rule').innerHTML = '보통 <b>3점</b> · 황금 <b>5점</b> · 놓치면 <b class="pen">-3점</b><br>라운드마다 <b>41점</b>이면 즉시 통과';
+  startGame();
+};
+$('mSprint').onclick = () => {
+  mode = 'sprint';
+  $('rule').innerHTML = '보통 <b>3점</b> · 황금 <b>5점</b> · 놓치면 <b class="pen">-3점</b><br><b>10초</b> 동안 최고 점수 노리기';
+  startGame();
+};
+vAlt.onclick = showPicker;
+
+document.addEventListener('keydown', e => {
+  if(e.code === 'Space' && !live && !veil.hidden && !resultPanel.hidden){ e.preventDefault(); vBtn.click(); }
+});
+
+showPicker();
+</script>
